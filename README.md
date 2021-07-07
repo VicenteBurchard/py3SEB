@@ -1,4 +1,57 @@
-# summary
+# 3SEB
 
-This project contains experimental Python code for Three Source Energy Balance models using a single Priestley-Taylor (ThreeSEB_PL_singlePT) or double overstory and understory Priestley-Taylor (ThreeSEB_PL_doublePT) for estimating sensible and latent heat flux (evapotranspiration) based on measurements of radiometric surface temperature over tree-grass ecosystems.
+## Synopsis
 
+This project contains experimental *Python* code for *Three Source Energy Balance* models using double overstory and understory Priestley-Taylor (**ThreeSEB_PL_doublePT**) for estimating sensible and latent heat flux (evapotranspiration) based on measurements of radiometric surface temperature over tree-grass ecosystems. 
+
+## Installation
+The following Python libraries will be required:
+- pyTSEB
+- Numpy
+- matplotlib
+
+## Basic Contents
+### High-level scripts
+- *3SEB_doublePT_main_ground_Majadas.py*  high level scripts for running **ThreeSEB_PL_doublePT** with the example inputs
+
+### Low-level module
+The low-level module in this project is aimed at providing customisation and more flexibility in running 3SEB. 
+The following module is included
+
+- *TSEB_3S_PT*
+> core functions for running different 3SEB models (`ThreeSEB_PL_doublePT(*args,**kwargs)`). 
+
+## Tests
+The folders *./Meteo_data* and *./Veg_data* contains the example for running 3SEB. Just run the high-level scripts *w3SEB_doublePT_main_ground_Majadas.py* or *3SEB_singlePT_main_ground_Majadas.py* and see the resulting outputs stored in *./Output/*
+
+## Main Scientific References
+- Burchard-Levine V, Nieto H, Riaño D, Migliavacca M, El-Madany TS, Perez-Priego O, Carrara A, Martín MP. Seasonal Adaptation of the Thermal-Based Two-Source Energy Balance Model for Estimating Evapotranspiration in a Semiarid Tree-Grass Ecosystem. Remote Sensing. 2020; 12(6):904. doi: 10.3390/rs12060904
+- Norman,  J.  M.,  Kustas,  W.  P.,  Prueger,  J.  H.,  and  Diak,  G.  R.: Surface  flux  estimation  using  radiometric  temperature:  a  dual-temperature-difference method to minimize measurement errors, Water  Resour.  Res.,  36,  2263,  doi: 10.1029/2000WR900033, 2000
+- Norman,  J.,  Kustas,  W.,  and  Humes,  K.:  A  two-source  approach for estimating soil and vegetation fluxes from observations of directional radiometric surface temperature, Agr. Forest Meteorol., 77, 263–293, doi: 10.1016/0168-1923(95)02265-Y, 1995
+- Kustas, W. P. and Norman, J. M.: A two-source approach for estimating turbulent fluxes using multiple angle thermal infrared observations, Water Resour. Res., 33, 1495–1508, 199
+- Kustas,  W.  P.  and  Norman,  J.  M.:  Evaluation  of  soil  and  vegetation heat flux prediction using a simple two-source model with radiometric  temperatures  for  partial  canopy  cover,  Agr.  Forest Meteorol., 94, 13–29, 199
+- Guzinski, R., Nieto, H., Stisen, S., and Fensholt, R.: Inter-comparison of energy balance and hydrological models for land surface energy flux estimation over a whole river catchment, Hydrol. Earth Syst. Sci., 19, 2017-2036, doi:10.5194/hess-19-2017-2015, 2015.
+- William P. Kustas, Hector Nieto, Laura Morillas, Martha C. Anderson, Joseph G. Alfieri, Lawrence E. Hipps, Luis Villagarcía, Francisco Domingo, Monica Garcia: Revisiting the paper “Using radiometric surface temperature for surface energy flux estimation in Mediterranean drylands from a two-source perspective”, Remote Sensing of Environment, In Press. doi:10.1016/j.rse.2016.07.024.
+
+## Contributors
+- **Vicente Burchard-Levine** <vicentefelipe.burchard@cchs.csic.es> <vburchardlevine@gmail.com> main developer
+- **Hector Nieto** <hector.nieto@complutig.com> <hector.nieto.solana@gmail.com> TSEB modeling, tester 
+- **William P. Kustas** TSEB modeling, tester 
+
+## License
+3SEB: a Python Three Source Energy Balance Model
+
+Copyright 2020 Vicente Burchard-Levine and contributors.
+    
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
