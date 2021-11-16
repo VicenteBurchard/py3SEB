@@ -28,7 +28,7 @@ The following module is included:
 > core functions for running different 3SEB models (`ThreeSEB_PT(*args,**kwargs)`). 
 
 ## Tests
-The folders *.Inputs/Meteo_data* and *.Inputs/Veg_data* contains the example for running 3SEB. Just run the high-level scripts *w3Main_run3SEB_ground.py* and see the resulting outputs stored in *./Output/*
+The folders *.Inputs/Meteo_data* and *.Inputs/Veg_data* contains the example for running 3SEB. Just run the high-level scripts *Main_run3SEB_ground.py* and see the resulting outputs stored in *./Output/*
 
 ## Main Scientific References
 - Burchard-Levine V, Nieto H, Riaño D, Migliavacca M, El-Madany TS, Perez-Priego O, Carrara A, Martín MP. Seasonal Adaptation of the Thermal-Based Two-Source Energy Balance Model for Estimating Evapotranspiration in a Semiarid Tree-Grass Ecosystem. Remote Sensing. 2020; 12(6):904. doi: 10.3390/rs12060904
