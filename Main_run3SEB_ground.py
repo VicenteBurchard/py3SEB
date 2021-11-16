@@ -131,7 +131,7 @@ for year in years:
         x_LAD_sub = 1  # LAD coefficient for grass
 
         #open vegetation data
-        MODIS_file = join(workdir, 'Veg_data',site_name, 'VegIndices_MODIS_Filtered_%s.txt' % (site_name))
+        MODIS_file = join(workdir, 'Input', 'Veg_data',site_name, 'VegIndices_MODIS_Filtered_%s.txt' % (site_name))
         MODIS_ds = np.genfromtxt(MODIS_file, delimiter='\t', names=True, dtype=None)
         # filter for year in question
         MODIS_LAI = MODIS_ds[MODIS_ds['hydro_year']==year]
@@ -154,7 +154,7 @@ for year in years:
             mkdir(outdir_site)
 
         #open meteo data
-        meteoFile = join(workdir, 'Meteo_data', site_name, '%s_meteo.txt'%(site_name))
+        meteoFile = join(workdir, 'Input', 'Meteo_data', site_name, '%s_meteo.txt'%(site_name))
         metdata = pd.read_csv(meteoFile, sep='\t')
         # filter for year in question
         metdata = metdata[metdata['year_hydro'] == year]
