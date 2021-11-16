@@ -2,27 +2,33 @@
 
 ## Synopsis
 
-This project contains experimental *Python* code for *Three Source Energy Balance* models using double overstory and understory Priestley-Taylor (**ThreeSEB_PL_doublePT**) for estimating sensible and latent heat flux (evapotranspiration) based on measurements of radiometric surface temperature over tree-grass ecosystems. 
+This project contains experimental *Python* code for the *Three Source Energy Balance*  (3SEB) model using a nested double Priestley-Taylor intialization (**ThreeSEB_PT**) for estimating sensible and latent heat flux (evapotranspiration) based on measurements of radiometric surface temperature over tree-grass ecosystems. 
+
+3SEB is a modified version of Two-Source Energy Balance (TSEB) model (Norman et al. 1995). It incorporates an additional vegetation source within its model structure (i.e., overstory vegetation, understory vegetation and soil). It largely uses and is based on functions developed from the python implementation of TSEB (pyTSEB, which can be found here: https://github.com/hectornieto/pyTSEB/).
+
+This repository contains a high-level script (**Main_run3SEB_ground.py**) to run 3SEB with the example dataset provided in **Inputs** from Majadas del Tietar experimental site in Spain (tower data repository: https://zenodo.org/record/4453567#.YZOZ5WDMKyx). The script **Functions_3SEB.py** provide the core functions necesarry to run 3SEB.
+
 
 ## Installation
 The following Python libraries will be required:
-- pyTSEB
+- pyTSEB: https://github.com/hectornieto/pyTSEB/
 - Numpy
+- pandas
 - matplotlib
 
 ## Basic Contents
 ### High-level scripts
-- *3SEB_doublePT_main_ground_Majadas.py*  high level scripts for running **ThreeSEB_PL_doublePT** with the example inputs
+- *Main_run3SEB_ground.py*  high level scripts for running **ThreeSEB_PT** with the example inputs
 
 ### Low-level module
 The low-level module in this project is aimed at providing customisation and more flexibility in running 3SEB. 
-The following module is included
+The following module is included:
 
-- *TSEB_3S_PT*
-> core functions for running different 3SEB models (`ThreeSEB_PL_doublePT(*args,**kwargs)`). 
+- *Functions_3SEB*
+> core functions for running different 3SEB models (`ThreeSEB_PT(*args,**kwargs)`). 
 
 ## Tests
-The folders *./Meteo_data* and *./Veg_data* contains the example for running 3SEB. Just run the high-level scripts *w3SEB_doublePT_main_ground_Majadas.py* or *3SEB_singlePT_main_ground_Majadas.py* and see the resulting outputs stored in *./Output/*
+The folders *.Inputs/Meteo_data* and *.Inputs/Veg_data* contains the example for running 3SEB. Just run the high-level scripts *w3Main_run3SEB_ground.py* and see the resulting outputs stored in *./Output/*
 
 ## Main Scientific References
 - Burchard-Levine V, Nieto H, Riaño D, Migliavacca M, El-Madany TS, Perez-Priego O, Carrara A, Martín MP. Seasonal Adaptation of the Thermal-Based Two-Source Energy Balance Model for Estimating Evapotranspiration in a Semiarid Tree-Grass Ecosystem. Remote Sensing. 2020; 12(6):904. doi: 10.3390/rs12060904
