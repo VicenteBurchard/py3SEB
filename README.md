@@ -16,7 +16,8 @@ ES-Abr (Obtained from Zenodo public repository: https://zenodo.org/record/370784
 
 US-Ton (Obtained from Ameriflux portal: https://ameriflux.lbl.gov/sites/siteinfo/US-Ton)
 
-The script **Functions_3SEB.py** provide the core functions necesarry to run 3SEB.
+
+The script **Functions_3SEB.py** provides the core functions necessary to run 3SEB.
 
 
 ## Installation
