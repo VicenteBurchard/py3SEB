@@ -7,9 +7,13 @@ This project contains experimental *Python* code for the *Three Source Energy Ba
 3SEB is a modified version of Two-Source Energy Balance (TSEB) model (Norman et al. 1995). It incorporates an additional vegetation source within its model structure (i.e., overstory vegetation, understory vegetation and soil). It largely uses and is based on functions developed from the python implementation of TSEB (pyTSEB, which can be found here: https://github.com/hectornieto/pyTSEB/).
 
 This repository contains a high-level script (**Main_run3SEB_ground.py**) to run 3SEB with the example datasets provided in **Inputs** using data from:
+
 AU-Dry (Obtained from Ozflux portal: https://www.ozflux.org.au/monitoringsites/dryriver/)
+
 ES-LM1 (Obtained from Zenodo public repository: https://zenodo.org/record/4453567#.YWMEDNpByyw)
+
 ES-Abr (Obtained from Zenodo public repository: https://zenodo.org/record/3707842#.YWMEAtpByyz)
+
 US-Ton (Obtained from Ameriflux portal: https://ameriflux.lbl.gov/sites/siteinfo/US-Ton)
 
 The script **Functions_3SEB.py** provide the core functions necesarry to run 3SEB.
