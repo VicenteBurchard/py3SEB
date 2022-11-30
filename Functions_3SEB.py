@@ -8,7 +8,7 @@ from pyTSEB import resistances as res
 from pyTSEB import MO_similarity as MO
 from pyTSEB import net_radiation as rad
 from pyTSEB import clumping_index as CI
-# comment
+
 
 # ==============================================================================
 # List of constants used in TSEB/3SEB model and sub-routines
@@ -444,7 +444,7 @@ def ThreeSEB_PT(Tr_K,
             Rn_C_sub[i] = Sn_C_sub[i] + Ln_C_sub[i]
             Rn_S[i] = Sn_S[i] + Ln_S[i]
             # Calculate the canopy and subtrate temperatures using the Priestley Taylor approach
-            H_C[i] = TSEB.calc_H_C_PT(
+            H_C[i] = calc_H_C_PT(
                 delta_Rn[i],
                 f_g[i],
                 T_A_K[i],
@@ -506,7 +506,7 @@ def ThreeSEB_PT(Tr_K,
                 flag[np.logical_and(j, alpha_PT_rec_sub == 0.0)] = F_ZERO_LE
                 flag[np.logical_and.reduce((j, alpha_PT_rec_sub < alpha_PT, alpha_PT_rec_sub > 0.0))] = F_ZERO_LE_S
 
-                H_C_sub[j] = TSEB.calc_H_C_PT(
+                H_C_sub[j] = calc_H_C_PT(
                     Rn_C_sub[j],
                     f_g_sub[j],
                     T_A_K[j],
