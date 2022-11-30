@@ -1006,7 +1006,7 @@ def calc_shadow_fraction(sza, hc, hb, wc, f_C, tau):
 
     return f_shade
 
-def calc_Rn_substrate_BeerLambert(Sn, Ln, LAI, theta, x_LAD=1.0, alpha_s=0.5, kappa_l=0.95 ):
+ def calc_Rn_substrate_BeerLambert(Sn, Ln, LAI, theta, x_LAD=1.0, alpha_s=0.5, kappa_l=0.95 ):
     '''
 
     calculate substrate net radiation based on beer-lambert
@@ -1041,8 +1041,8 @@ def calc_Ln_substrate_Campbell(Ln, LAI, x_LAD=1.0, emiss_c=0.98, emiss_s=0.95):
     Ln_C = Ln - Ln_S
     return Ln_C, Ln_S
 
-
-def raupach_94(pai_eff, c_r=0.3, c_s=0.003, max_u_star_u_h=0.3, c_w=2.0, c_d1=7.5):
+  
+  def raupach_94(pai_eff, c_r=0.3, c_s=0.003, max_u_star_u_h=0.3, c_w=2.0, c_d1=7.5):
     """
     Computes the frontal leaf area index based on _[Raupach1992
     :param pai_eff:
@@ -1085,4 +1085,43 @@ def raupach_94(pai_eff, c_r=0.3, c_s=0.003, max_u_star_u_h=0.3, c_w=2.0, c_d1=7.
     # Eq. 4 of ..[Raupach1994]
     z0M_factor = (1 - d_factor) * np.exp(-k / u_star_u_h - psi_h)
     return np.asarray(z0M_factor), np.asarray(d_factor)
+  
+  def calc_H_C_PT(delta_R_ni, f_g, T_A_K, P, c_p, alpha):
+    '''Calculates canopy sensible heat flux based on the Priestley and Taylor formula.
+
+    Parameters
+    ----------
+    delta_R_ni : float
+        net radiation divergence of the vegetative canopy (W m-2).
+    f_g : float
+        fraction of vegetative canopy that is green.
+    T_A_K : float
+        air temperature (Kelvin).
+    P : float
+        air pressure (mb).
+    c_p : float
+        heat capacity of moist air (J kg-1 K-1).
+    alpha : float
+        the Priestley Taylor parameter.
+
+    Returns
+    -------
+    H_C : float
+        Canopy sensible heat flux (W m-2).
+
+    References
+    ----------
+    Equation 14 in [Norman1995]_
+    '''
+
+    # slope of the saturation pressure curve (kPa./deg C)
+    s = met.calc_delta_vapor_pressure(T_A_K)
+    s = s * 10  # to mb
+    # latent heat of vaporisation (J./kg)
+    Lambda = met.calc_lambda(T_A_K)
+    # psychrometric constant (mb C-1)
+    gama = met.calc_psicr(c_p, P, Lambda)
+    s_gama = s / (s + gama)
+    H_C = delta_R_ni * (1.0 - alpha * f_g * s_gama)
+    return np.asarray(H_C)
 
