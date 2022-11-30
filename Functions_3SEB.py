@@ -1006,7 +1006,7 @@ def calc_shadow_fraction(sza, hc, hb, wc, f_C, tau):
 
     return f_shade
 
- def calc_Rn_substrate_BeerLambert(Sn, Ln, LAI, theta, x_LAD=1.0, alpha_s=0.5, kappa_l=0.95 ):
+def calc_Rn_substrate_BeerLambert(Sn, Ln, LAI, theta, x_LAD=1.0, alpha_s=0.5, kappa_l=0.95 ):
     '''
 
     calculate substrate net radiation based on beer-lambert
@@ -1042,7 +1042,7 @@ def calc_Ln_substrate_Campbell(Ln, LAI, x_LAD=1.0, emiss_c=0.98, emiss_s=0.95):
     return Ln_C, Ln_S
 
   
-  def raupach_94(pai_eff, c_r=0.3, c_s=0.003, max_u_star_u_h=0.3, c_w=2.0, c_d1=7.5):
+def raupach_94(pai_eff, c_r=0.3, c_s=0.003, max_u_star_u_h=0.3, c_w=2.0, c_d1=7.5):
     """
     Computes the frontal leaf area index based on _[Raupach1992
     :param pai_eff:
@@ -1086,7 +1086,7 @@ def calc_Ln_substrate_Campbell(Ln, LAI, x_LAD=1.0, emiss_c=0.98, emiss_s=0.95):
     z0M_factor = (1 - d_factor) * np.exp(-k / u_star_u_h - psi_h)
     return np.asarray(z0M_factor), np.asarray(d_factor)
   
-  def calc_H_C_PT(delta_R_ni, f_g, T_A_K, P, c_p, alpha):
+def calc_H_C_PT(delta_R_ni, f_g, T_A_K, P, c_p, alpha):
     '''Calculates canopy sensible heat flux based on the Priestley and Taylor formula.
 
     Parameters
