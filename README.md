@@ -27,6 +27,22 @@ The following Python libraries will be required:
 - pandas
 - matplotlib
 
+
+With `conda`, you can create a complete environment with
+```bash
+conda env create -f environment.yml
+```
+
+or with pip:
+```bash
+pip install -r requirements.txt
+```
+
+Then you can install py3SEB as:
+```bash
+pip install ./
+```
+
 ## Basic Contents
 ### High-level scripts
 - *Main_run3SEB_ground.py*  high level scripts for running **ThreeSEB_PT** with the example inputs
