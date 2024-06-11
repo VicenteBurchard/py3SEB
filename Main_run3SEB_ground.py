@@ -6,7 +6,7 @@ from os.path import  exists, join
 from os import mkdir, getcwd
 import csv
 import scipy.stats as st
-from Functions_3SEB import ThreeSEB_PT, raupach_94, calc_Sn_Campbell
+from py3seb.py3seb import ThreeSEB_PT, raupach_94, calc_Sn_Campbell
 
 
 
