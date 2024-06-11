@@ -35,7 +35,7 @@ The following Python libraries will be required:
 The low-level module in this project is aimed at providing customisation and more flexibility in running 3SEB. 
 The following module is included:
 
-- *Functions_3SEB*
+- *./py3seb/pyseb.py*
 > core functions for running different 3SEB models (`ThreeSEB_PT(*args,**kwargs)`). 
 
 ## Tests

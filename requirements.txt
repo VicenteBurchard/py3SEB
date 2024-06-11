@@ -1,0 +1,7 @@
+numpy >= 1.10
+bokeh
+git+https://github.com/hectornieto/pyTSEB@master
+pandas
+netCDF4
+scipy
+

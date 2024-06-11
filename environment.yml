@@ -1,0 +1,16 @@
+name: py3seb
+channels:
+    - conda-forge
+dependencies:
+    - python=3
+    - gdal
+    - numpy
+    - scipy
+    - pandas
+    - jupyter
+    - notebook
+    - bokeh
+    - netCDF4
+    - pip
+    - pip:
+        - https://github.com/hectornieto/pyTSEB
