@@ -312,7 +312,7 @@ def ThreeSEB_PT(Tr_K,
     resistance_form = resistance_form[0]
     # Create the output variables
     [T_AC, L_n_sub, L_nC, H, LE, LE_sub, H_sub, LE_C, H_C, LE_C_sub, H_C_sub, LE_S, H_S, G, R_S,R_sub, R_x, R_A, delta_Rn, Rn_sub, Rn_C_sub,
-      Ln_C_sub, Ln_S, Rn_S, alpha_final, alpha_final_sub, iterations] = [np.zeros(Tr_K.shape) + np.NaN for i in range(27)]
+      Ln_C_sub, Ln_S, Rn_S, alpha_final, alpha_final_sub, iterations] = [np.zeros(Tr_K.shape) + np.nan for i in range(27)]
 
     Sn_sub = Sn_S + Sn_C_sub
     # iteration of the Monin-Obukhov length
