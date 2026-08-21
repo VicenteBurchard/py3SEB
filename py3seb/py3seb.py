@@ -8,8 +8,8 @@ from pyTSEB import resistances as res
 from pyTSEB import MO_similarity as MO
 from pyTSEB import net_radiation as rad
 from pyTSEB import clumping_index as CI
-
-
+from pyTSEB import energy_combination_ET as pet
+from . import energy_combination_ET_3source as et
 # ==============================================================================
 # List of constants used in TSEB/3SEB model and sub-routines
 # ==============================================================================
@@ -18,7 +18,7 @@ L_thres = 0.001
 # mimimun allowed friction velocity
 u_friction_min = 0.01
 # Maximum number of interations
-ITERATIONS = 30
+ITERATIONS = 15
 # kB coefficient
 kB = 0.0
 # Stephan Boltzmann constant (W m-2 K-4)
@@ -57,6 +57,7 @@ STEP_RSS = 500.
 MAX_RST = 5000.
 RELATIVE_INCREASE = 0.10
 STEP_RST = 10.
+MAX_RSS = 20000
 # Steps for increasing surface resistance to water transport in TSEB-PM
 MAX_RC = 5000.
 STEP_RC = 5.
@@ -3525,6 +3526,8 @@ def ThreeSEB_SW_SEQ(Tr_K,
                 resistance_form=[0, {}],
                 calcG_params=[[1],0.35],
                 massman_profile=[0.0, []],
+                leaf_type_ov=2,
+                leaf_type_un=2,
                 const_L=None):
 
     '''Three-source model (3SEB) with 3-source SW initialization
@@ -3705,6 +3708,8 @@ def ThreeSEB_SW_SEQ(Tr_K,
      f_g_sub,
      w_C,
      w_C_sub,
+     leaf_type_ov,
+     leaf_type_un,
      calcG_array) = map(_check_default_parameter_size,
                         [vza,
                          T_A_K,
@@ -3742,15 +3747,17 @@ def ThreeSEB_SW_SEQ(Tr_K,
                          f_g_sub,
                          w_C,
                          w_C_sub,
+                         leaf_type_ov,
+                         leaf_type_un,
                          calcG_params[1]],
-                        [Tr_K] * 37)
+                        [Tr_K] * 39)
     res_params = resistance_form[1]
     resistance_form = resistance_form[0]
     # Create the output variables
-    [T_AC, L_n_sub, L_nC, H, LE, LE_sub, H_sub, LE_C, H_C, LE_C_sub, H_C_sub, LE_S, H_S, G, R_S,R_sub, R_X_ov, R_X_un, R_A,
-     delta_Rn, Rn_sub, Rn_C_sub, Ln_C_sub, Ln_S, Rn_S, iterations] = [np.zeros(Tr_K.shape) + np.nan for i in range(26)]
+    [T_AC, L_n_sub, L_nC, H, LE, LE_sub, H_sub, LE_C, H_C, LE_C_sub, H_C_sub, LE_S,
+     H_S, G, R_S, R_X_ov, R_X_un, R_A,delta_Rn, Rn_sub, Rn_C_sub, Ln_C_sub, Ln_S, Rn_S,
+     R_c_ov, R_c_un, Rss_out, Rst_un_out, Rst_ov_out, iterations] = [np.zeros(Tr_K.shape) + np.nan for i in range(30)]
 
-    Sn_sub = Sn_S + Sn_C_sub
     # iteration of the Monin-Obukhov length
     if const_L is None:
         # Initially assume stable atmospheric conditions and set variables for
@@ -3795,17 +3802,36 @@ def ThreeSEB_SW_SEQ(Tr_K,
     L_converged = np.asarray(np.zeros(Tr_K.shape)).astype(bool)
     L_diff_max = np.inf
 
-    ### patch-layer model --> initial assumption that T_C, T_C_sub and T_S equals T_A
     # First assume that canopy temperature (T_C) equals the minumum of Air or radiometric T
     T_C = np.asarray(np.minimum(Tr_K, T_A_K))
     #T_sub = Tr_K - (f_theta*T_C)/(1-f_theta)
     flag, T_sub = TSEB.calc_T_S(Tr_K, T_C, f_theta)
     T_sub_converged = np.asarray(np.zeros(Tr_K.shape)).astype(bool)
-    H_sub_converged = np.asarray(np.zeros(Tr_K.shape)).astype(bool)
 
     # Assume first guess that T_C_sub is mean between T_A and T_sub
     T_C_sub = (T_sub + T_A_K)/2
     flag, T_S = TSEB.calc_T_S(T_sub, T_C_sub, f_theta_sub)
+    T_AC = T_A_K.copy()
+    # Calculate net longwave radiation with current values of T_C, T_C_sub and T_S
+    L_nC, L_n_sub = rad.calc_L_n_Campbell(T_C, T_sub, L_dn, LAI, emis_C, emis_sub,
+                                                x_LAD=x_LAD)
+    Sn_sub = Sn_S + Sn_C_sub
+
+    # maybe check for convergance of radiation between layers
+    delta_Rn = Sn_C + L_nC
+    Rn_sub = Sn_sub+ L_n_sub
+
+    # apply Cambpell longwave transmittance on substrate
+    # (calculate sub-canopy LW and soil LW radiation)
+    Ln_C_sub, Ln_S = calc_Ln_substrate_Campbell(L_n_sub,
+                                                      LAI_sub,
+                                                      x_LAD=x_LAD_sub,
+                                                      emiss_c=emis_sub,
+                                                      emiss_s=emis_S)
+
+    Rn_C_sub = Sn_C_sub + Ln_C_sub
+    Rn_S = Sn_S + Ln_S
+    Rn = delta_Rn + Rn_C_sub + Rn_S
 
     # Outer loop for estimating stability.
     # Stops when difference in consecutives L is below a given threshold
@@ -3813,7 +3839,6 @@ def ThreeSEB_SW_SEQ(Tr_K,
     loop_time = time.time()
     for n_iterations in range(max_iterations):
         i = flag != F_INVALID
-        j = flag != F_INVALID
         if np.all(L_converged[i]):
             if L_converged[i].size == 0:
                 print("Finished iterations with no valid solution")
@@ -3827,111 +3852,302 @@ def ThreeSEB_SW_SEQ(Tr_K,
         print("Iteration: %d, non-converged pixels: %d, max L diff: %f, total time: %f, loop time: %f" %(n_iterations, np.sum(~L_converged[i]), L_diff_max, total_duration, loop_duration))
         iterations[np.logical_and(~L_converged, flag != F_INVALID)] = n_iterations
 
-        # Double inner loop to iterativelly reduce alpha_PT in case latent heat flux
-        # from the soil or substrate is negative. The initial assumption is of potential
-        # canopy transpiration. Nested loop with different alpha for overstory vegetation and understory vegetation.
 
         flag[np.logical_and(~L_converged, flag != F_INVALID)] = F_ALL_FLUXES
         LE_S[np.logical_and(~L_converged, flag != F_INVALID)] = -1
         LE_sub[np.logical_and(~L_converged, flag != F_INVALID)] = -1
+        LE_C[np.logical_and(~L_converged, flag != F_INVALID)] = -1
+
         T_sub_converged[np.logical_and(~L_converged, flag != F_INVALID)] = False
 
-        rst_step = STEP_RST
-        Rst_ov = Rst_ov_min[:] - STEP_RST
-        Rst_un = Rst_un_min[:] - STEP_RST
+        rst_step_ov = STEP_RST
+        rst_step_un = STEP_RST*2
+        Rst_ov = Rst_ov_min[:] - rst_step_ov
+        Rst_un = Rst_un_min[:] - rst_step_un
         Rss = Rss_min[:] - STEP_RSS
 
         max_it1 = 50
-        for it1 in range(max_it1):
-            i = np.logical_and.reduce((np.logical_or(LE_sub < 0, H_C < 0),
+        it = 0
+        #for it1 in range(max_it1):
+        #print(f'-- first i: {np.sum(i)}')
+        #print(f'LE_S: {np.sum(LE_S < 0)}')
+        #print(f'L_converged: {np.sum(~L_converged)}')
+
+        constraint = np.logical_and.reduce((
+                                            LE_S[i] < 0,
+                                            LE_C[i] > delta_Rn[i],
+                                            LE_C_sub[i] > Rn_C_sub[i]))
+        eps = 20 # w/m2
+        #constraint = LE_S[i] < 0
+        while np.any(np.logical_and(LE_S[i] < 0, LE_C[i] > delta_Rn[i] + eps)):
+
+            #i = np.logical_and.reduce((np.logical_or(LE_S < 0, LE_C > delta_Rn,LE_C_sub > Rn_C_sub),
+            #                           ~L_converged,
+            #                           flag != F_INVALID))
+            #                           #np.logical_or(Rst_ov < MAX_RST, Rst_un < MAX_RST)
+                                     #))
+            i = np.logical_and.reduce((np.logical_or(LE_S < 0,LE_C > delta_Rn + eps),
                                        ~L_converged,
                                        flag != F_INVALID))
-            Rst_ov[i] += rst_step
-            Rst_un[i] += rst_step
-            Rss[i] += STEP_RSS  # Soil is drier and hence we increase soil surface resistance
-            rst_step += RELATIVE_INCREASE * rst_step
+                                       #np.logical_or(Rst_ov < MAX_RST, Rst_un < MAX_RST)
+                                     #))
 
+            if it > 100:
+                break
+
+            #print(f'iteration {it}: {np.sum(i)}')
+            #print(f'LE_S: {np.sum(LE_S < 0)}')
+            #print(f'L_converged: {np.sum(~L_converged)}')
+
+
+            Rst_ov[i] += rst_step_ov
+            Rst_un[i] += rst_step_un
+            Rss[i] += STEP_RSS  # Soil is drier and hence we increase soil surface resistance
+            rst_step_ov += RELATIVE_INCREASE * rst_step_ov
+            rst_step_un += RELATIVE_INCREASE * rst_step_un
+
+            Rss[np.logical_and(i,Rss>MAX_RSS)] = MAX_RSS
+            Rst_un[np.logical_and(i,Rst_un>MAX_RST)] = MAX_RST
+            Rst_ov[np.logical_and(i,Rst_ov>MAX_RST)] = MAX_RST
+
+            # There cannot be negative transpiration from the vegetation
+            flag[np.logical_and(i, Rst_ov > MAX_RST)] = F_ZERO_LE
+            flag[np.logical_and(i, Rst_un > MAX_RST)] = F_ZERO_LE
+
+            #flag[np.logical_and.reduce((i, Rss > 500, Rst_ov < MAX_RST))] =\
+            #    F_ZERO_LE_S
+
+
+            # Transfer the resistances
+            Rst_ov_out[i] = Rst_ov[i]
+            Rst_un_out[i] = Rst_un[i]
+            Rss_out[i] = Rss[i]
+
+
+
+            #print(f'Rst_ov: {Rst_ov}')
+            #print(f'Rst_ov {Rst_ov.shape} vs Rst_ov[i] {Rst_ov[i].shape}')
             flag[np.logical_and(i, Rst_ov > MAX_RST)] = F_ZERO_LE
 
-            R_A[i],R_X_ov[i], R_sub[i] = TSEB.calc_resistances(resistance_form,
+            # aerodynamic resistances (air, overstory bulk )
+            R_A[i], R_X_ov[i], _ = TSEB.calc_resistances(resistance_form,
                                                       {"R_A": {"z_T": z_T[i], "u_friction": u_friction[i], "L": L[i],
                                                                "d_0": d_0[i], "z_0H": z_0H[i]},
-
-                                                       "R_S": {"u_friction": u_friction[i], "h_C": h_C[i],
+                                                       "R_x": {"u_friction": u_friction[i], "h_C": h_C[i],
                                                                "d_0": d_0[i],
                                                                "z_0M": z_0M[i], "L": L[i], "F": F[i],
-                                                               "omega0": omega0[i],
-                                                               "LAI": LAI[i], "leaf_width": leaf_width[i],"massman_profile": massman_profile,
-                                                               "z0_soil": z0_soil[i], "z_u": z_u[i],
-                                                               "deltaT": T_sub[i] - T_C[i], 'u': u[i], 'rho': rho[i],
-                                                               "c_p": c_p[i], "f_cover": f_c[i], "w_C": w_C[i],
+                                                               "LAI": LAI[i],
+                                                               "leaf_width": leaf_width[i],
+                                                               "massman_profile": massman_profile,
                                                                "res_params": {k: res_params[k][i] for k in
-                                                                             res_params.keys()}}
+                                                                              res_params.keys()}}
                                                        }
-                                                      )
+                                                             )
+            # aerodynamic resistances (understory bulk)
+            _, R_X_un[i], R_S[i] = TSEB.calc_resistances(resistance_form,
+                                                { "R_x": {"u_friction": u_friction[i], "h_C": h_C_sub[i],
+                                                                    "d_0": d_0_sub[i],
+                                                                    "z_0M": z_0M_sub[i], "L": L[i], "F": F_sub[i],
+                                                                    "LAI": LAI_sub[i],
+                                                                    "leaf_width": leaf_width_sub[i],
+                                                                    "massman_profile": massman_profile,
+                                                                    "res_params": {k: res_params[k][i] for k in res_params.keys()}},
+                                                  "R_S": {"u_friction": u_friction[i], "h_C": h_C_sub[i],
+                                                          "d_0": d_0_sub[i],
+                                                          "z_0M": z_0M_sub[i], "L": L[i], "F": F_sub[i],
+                                                          "omega0": omega0_sub[i],
+                                                          "LAI": LAI_sub[i], "leaf_width": leaf_width_sub[i],
+                                                          "massman_profile": massman_profile,
+                                                          "z0_soil": z0_soil[i], "z_u": z_u[i],
+                                                          "deltaT": T_S[i] - T_AC[i], 'u': u[i], 'rho': rho[i],
+                                                          "c_p": c_p[i], "f_cover": f_c_sub[i], "w_C": w_C[i],
+                                                          "res_params": {k: res_params[k][i] for k in
+                                                                         res_params.keys()}}
 
+                                                            })
+
+
+            # Overstory canopy level stomatal resistence
+            R_c_ov[i] = pet.bulk_stomatal_resistance(LAI[i] * f_g[i], Rst_ov[i], leaf_type=leaf_type_ov[i])
+            # understory canopy level stomatal resistence
+            R_c_un[i] = pet.bulk_stomatal_resistance(LAI_sub[i] * f_g_sub[i], Rst_un[i], leaf_type=leaf_type_un[i])
+
+            # taking into account substrate patch representation (i.e. LHomme et al.2012)
+            # need to divide resistances of substrate by fractional cover as in Lhomme 2012
+            R_S[i] = R_S[i]/(1-f_theta_sub[i])
+            Rss[i] = Rss[i]/(1-f_theta_sub[i])
+            R_X_un[i] = R_X_un[i]/f_theta_sub[i]
+            R_c_un[i] = R_c_un[i]/f_theta_sub[i]
+
+            # Calculate coefficients of modified clumped mdoel (3-source SW)
+            ## Appendix C from Lhomme et al.2012
+            _, _, _, _, C_s, C_un, C_ov = et.calc_effective_resistances_SW_3source(R_A[i],
+                                                                                   R_X_ov[i],
+                                                                                   R_X_un[i],
+                                                                                   R_S[i],
+                                                                                   R_c_ov[i],
+                                                                                   R_c_un[i],
+                                                                                   Rss[i],
+                                                                                   delta[i],
+                                                                                   psicr[i])
+            # Compute Soil Heat Flux Ratio
+            G[i] = TSEB.calc_G([calcG_params[0], calcG_array], Rn_S, i)
+
+            # Eq. 31 in [Lhomme et al.2012]
+            PM_S = (delta[i] * (Rn[i] - G[i]) + (rho_cp[i] * vpd[i] - delta[i] * R_S[i] * (delta_Rn[i] + Rn_C_sub[i])) / (
+                    R_A[i] + R_S[i])) / \
+                      (delta[i] + psicr[i] * (1. + Rss[i] / (R_A[i] + R_S[i])))
+            PM_S[np.isnan(PM_S)] = 0
+
+            # Eq. 31 in [Lhomme et al.2012]
+            PM_C_un = (delta[i] * (Rn[i] - G[i]) + (rho_cp[i] * vpd[i] - delta[i] * R_X_un[i] * (delta_Rn[i] + Rn_S[i] - G[i])) / (
+                    R_A[i] + R_X_un[i])) / \
+                   (delta[i] + psicr[i] * (1. + R_c_un[i] / (R_A[i] + R_X_un[i])))
+            PM_C_un[np.isnan(PM_C_un)] = 0
+
+            # Eq. 32 in [Lhomme et al.2012]
+            PM_C_ov = (delta[i] * (Rn[i] - G[i]) + (rho_cp[i] * vpd[i] - delta[i] * R_X_ov[i] * (Rn_C_sub[i] + Rn_S[i] - G[i])) / (
+                    R_A[i] + R_X_ov[i])) / \
+                   (delta[i] + psicr[i] * (1. + R_c_ov[i] / (R_A[i] + R_X_ov[i])))
+            PM_C_ov[np.isnan(PM_C_ov)] = 0
+
+
+            # Eq. 30 in [Lhomme et al.2012]
+            LE[i] = C_ov * PM_C_ov + C_un * PM_C_un + C_s * PM_S
+            H[i] = Rn[i] - G[i] - LE[i]
+
+            # Compute canopy and soil  fluxes
+            # Vapor pressure deficit at canopy source height (mb) # Eq. 8 in [Shuttleworth1988]_
+            vpd_0 = vpd[i] + (delta[i] * (Rn[i] - G[i]) - (delta[i] + psicr[i]) * LE[i]) * R_A[i] / (rho_cp[i])
+            # first estimate of T_AC
+            #T_AC[i] = T_A_K[i] + ((H[i]*R_A[i])/rho_cp[i])
+
+            # Eq. 10 in Shuttleworth & Wallace 1985
+            # overstory
+            LE_C[i] = (delta[i] * delta_Rn[i] + rho_cp[i] * vpd_0 / R_X_ov[i]) / \
+                      (delta[i] + psicr[i] * (1. + R_c_ov[i] / R_X_ov[i]))
+
+            H_C[i] = delta_Rn[i] - LE_C[i]
+            # understory
+            LE_C_sub[i] = (delta[i] * Rn_C_sub[i] + rho_cp[i] * vpd_0 / R_X_un[i]) / \
+                      (delta[i] + psicr[i] * (1. + R_c_un[i] / R_X_un[i]))
+
+            H_C_sub[i] = Rn_C_sub[i] - LE_C_sub[i]
+            # soil Eq. 9 in Shuttleworth & Wallace 1985
+            #LE_S[i] = (delta[i] * (Rn_S[i] - G[i]) + rho_cp[i] * vpd_0 / R_S[i]) / \
+            #          (delta[i] + psicr[i] * (1. + Rss[i] / R_S[i]))
+            #H_S[i] = Rn_S[i] - G[i] - LE_S[i]
+            # invert to get component temperatures (Appendix B. Montes et al. 2014)
+            # def calc_component_temperature_montes(A, Ra, Rs, T_AC, vpd_0, delta, rho_cp, psicr):
+
+            A_C = LE_C[i] + H_C[i]
+            # overstory
+            T_C[i] = et.calc_component_temperature_montes(A_C,
+                                                          R_X_ov[i],
+                                                          R_c_ov[i],
+                                                          T_AC[i],
+                                                          vpd_0,
+                                                          delta[i],
+                                                          rho_cp[i],
+                                                          psicr[i])
+            # understory
+            A_C_sub = LE_C_sub[i] + H_C_sub[i]
+            T_C_sub[i] = et.calc_component_temperature_montes(A_C_sub,
+                                                              R_X_un[i],
+                                                              R_c_un[i],
+                                                              T_AC[i],
+                                                              vpd_0,
+                                                              delta[i],
+                                                              rho_cp[i],
+                                                              psicr[i])
+            '''
+            # soil
+            A_S = LE_S[i] + H_S[i]
+            T_S[i] = et.calc_component_temperature_montes(A_S,
+                                                          R_S[i],
+                                                          Rss[i],
+                                                          T_AC[i],
+                                                          vpd_0,
+                                                          delta[i],
+                                                          rho_cp[i],
+                                                          psicr[i])
+            '''
+
+            #print(f'i_size = {LE_S[i].shape}')
+            #print(f'Rc-Iteration: {it}\nR_c_ov_mean = {np.nanmean(R_c_ov)}'
+            #      f'\nR_c_un_mean = {np.nanmean(R_c_un)}\nRss_mean = {np.nanmean(Rss)}\nLE_S = {LE_S[i]}')
+
+
+            #TODO: for now keep it like this (probably need to edit the calc_T_C_series for 3 sources)
+            #T_C[i] = TSEB.calc_T_C_series(Tr_K[i], T_A_K[i], R_A[i], R_X_ov[i],
+             #                        R_S[i], f_theta[i], H_C[i], rho[i], c_p[i])
+            flag_t_sub = np.zeros(flag.shape) + F_ALL_FLUXES
+
+            flag_t_sub[i], T_sub[i] = TSEB.calc_T_S(Tr_K[i], T_C[i], f_theta[i])
+
+            #TODO: for now keep it like this (probably need to edit the calc_T_C_series for 3 sources)
+            #T_C_sub[i] = TSEB.calc_T_C_series(T_sub[i], T_A_K[i], R_A[i], R_X_un[i],
+            #                              R_S[i], f_theta_sub[i], H_C_sub[i], rho[i], c_p[i])
+            flag_t = np.zeros(flag.shape) + F_ALL_FLUXES
+            # Calculate substrate temperature
+            flag_t[i], T_S[i] = TSEB.calc_T_S(T_sub[i], T_C_sub[i], f_theta_sub[i])
+            flag[flag_t == F_INVALID] = F_INVALID
+            LE_S[flag_t == F_INVALID] = 0
+            #print(f'Rc-Iteration: {it1}\nTa = {T_A_K[0]}\nTC = {T_S}')
 
             # Calculate net longwave radiation with current values of T_C, T_C_sub and T_S
-            L_nC[i], L_n_sub[i] = rad.calc_L_n_Campbell(T_C[i], T_sub[i], L_dn[i], LAI[i], emis_C[i], emis_sub[i], x_LAD=x_LAD[i])
+            ### TODO: change this to account that we now have all three component temperatures
+            L_nC[i], L_n_sub[i] = rad.calc_L_n_Campbell(T_C[i], T_sub[i], L_dn[i], LAI[i], emis_C[i], emis_sub[i],
+                                                  x_LAD=x_LAD[i])
             # maybe check for convergance of radiation between layers
-            delta_Rn[i] = Sn_C[i] + L_nC[i]
+            delta_Rn[i] = Sn_C [i] + L_nC[i]
             Rn_sub[i] = Sn_sub[i] + L_n_sub[i]
-
-
 
             # apply Cambpell longwave transmittance on substrate
             # (calculate sub-canopy LW and soil LW radiation)
             Ln_C_sub[i], Ln_S[i] = calc_Ln_substrate_Campbell(L_n_sub[i],
-                                                              LAI_sub[i],
-                                                              x_LAD=x_LAD_sub[i],
-                                                              emiss_c=emis_sub[i],
-                                                              emiss_s=emis_S[i])
+                                                        LAI_sub[i],
+                                                        x_LAD=x_LAD_sub[i],
+                                                        emiss_c=emis_sub[i],
+                                                        emiss_s=emis_S[i])
 
             Rn_C_sub[i] = Sn_C_sub[i] + Ln_C_sub[i]
             Rn_S[i] = Sn_S[i] + Ln_S[i]
-
-            # Calculate the canopy and subtrate temperatures using the PM approach
-            # Eq. B1 in [Colaizzi2012]_
-            gamma_star = psicr[i] * (1. + r_c[i] / R_A[i])
-            LE_C[i] = f_g[i] * (delta[i] * delta_Rn[i] / (delta[i] + gamma_star) +
-                                (rho[i] * c_p[i] * vpd[i])
-                                / (R_A[i] * (delta[i] + gamma_star)))
-            H_C[i] = delta_Rn[i] - LE_C[i]
-
-            #get primary canopy temperature with parallel approach
-            T_C[i] = calc_T_C_Parallel(H_C[i], R_A[i], T_A_K[i], rho[i], c_p[i])
-
-            # Calculate substrate temperature
-            flag_t = np.zeros(flag.shape) + F_ALL_FLUXES
-            flag_t[i], T_sub[i] = TSEB.calc_T_S(Tr_K[i], T_C[i], f_theta[i])
-            flag[flag_t == F_INVALID] = F_INVALID
-            LE_sub[flag_t == F_INVALID] = 0
-
+            Rn[i] = delta_Rn[i] + Rn_C_sub[i] + Rn_S[i]
 
             # Recalculate soil resistance using new substrate and canopy temperature
-            _, _, R_sub[i] = TSEB.calc_resistances(resistance_form,
+            _, _, R_S[i] = TSEB.calc_resistances(resistance_form,
                                             {
-                                             "R_S": {"u_friction": u_friction[i], "h_C": h_C[i], "d_0": d_0[i],
-                                                     "z_0M": z_0M[i], "L": L[i], "F": F[i], "omega0": omega0[i],
-                                                     "LAI": LAI[i], "leaf_width": leaf_width[i],"massman_profile": massman_profile,
+                                             "R_S": {"u_friction": u_friction[i], "h_C": h_C_sub[i], "d_0": d_0_sub[i],
+                                                     "z_0M": z_0M_sub[i], "L": L[i], "F": F_sub[i], "omega0": omega0_sub[i],
+                                                     "LAI": LAI_sub[i], "leaf_width": leaf_width_sub[i],"massman_profile": massman_profile,
                                                      "z0_soil": z0_soil[i], "z_u": z_u[i],
-                                                     "deltaT": T_sub[i] - T_C[i], "u": u[i], "rho": rho[i],
-                                                     "c_p": c_p[i], "f_cover": f_c[i], "w_C": w_C[i],
+                                                     "deltaT": T_S[i] - T_AC[i], "u": u[i], "rho": rho[i],
+                                                     "c_p": c_p[i], "f_cover": f_c_sub[i], "w_C": w_C_sub[i],
                                                      "res_params": {k: res_params[k][i] for k in res_params.keys()}}
                                              }
                                             )
+            #i = np.logical_and.reduce((LE_S < 0, ~L_converged, flag != F_INVALID))
+            i = np.logical_and.reduce((np.logical_or(LE_S < 0,LE_C > delta_Rn,LE_C_sub > Rn_C_sub),
+                                       ~L_converged,
+                                       flag != F_INVALID
+                                     ))
+            #(f'iteration {it} (AFTER): {np.sum(i)}')
+            #print(f'LE_S: {np.sum(LE_S < 0)}')
+            #print(f'L_converged: {np.sum(~L_converged)}')
 
-            i = np.logical_and.reduce((LE_sub < 0, ~L_converged, flag != F_INVALID))
-
-            #get subtrate H flux
-            H_sub[i] = rho[i] * c_p[i] * ((T_sub[i] - T_A_K[i]) / (R_sub[i]+R_A[i]))
-
-            # Compute Soil Heat Flux Ratio
-            G[i] = TSEB.calc_G([calcG_params[0], calcG_array], Rn_S, i)
+            # TODO: check if correct formulation (adapted equation A.4 of Norman et al. 1995)
+            T_AC[i] = ((T_A_K[i] / R_A[i] + T_S[i] / R_S[i] + T_C_sub[i] / R_X_un[i] + T_C[i] / R_X_ov[i])
+                       / (1 / R_A[i] + 1 / R_S[i] + 1 / R_X_un[i] + 1 / R_X_ov[i]))
+            # Calculate heat fluxes
+            H_S[i] = rho[i] * c_p[i] * (T_S[i] - T_AC[i]) / R_S[i]
+            H_C_sub[i] = rho[i] * c_p[i] * (T_C_sub[i] - T_AC[i]) / R_X_un[i]
+            H_C[i] = rho[i] * c_p[i] * (T_C[i] - T_AC[i]) / R_X_ov[i]
 
             # Estimate latent heat fluxes as residual of energy balance at the
-            # soil and the canopy
-            LE_sub[i] = Rn_sub[i] - G[i] - H_sub[i]
+            # soil, understory canopy and overstory canopy
+            LE_S[i] = Rn_S[i] - G[i] - H_S[i]
+            LE_C_sub[i] = Rn_C_sub[i] - H_C_sub[i]
             LE_C[i] = delta_Rn[i] - H_C[i]
 
             # Special case if there is no transpiration from vegetation.
@@ -3939,139 +4155,37 @@ def ThreeSEB_SW_SEQ(Tr_K,
             # and the energy at the soil should be conserved.
             # See end of appendix A1 in Guzinski et al. (2015).
             noT = np.logical_and(i, LE_C == 0)
-            H_sub[noT] = np.minimum(H_sub[noT], Rn_C_sub[noT]+Rn_S[noT] - G[noT])
-            G[noT] = np.maximum(G[noT], Rn_C_sub[noT]+Rn_S[noT] - H_S[noT])
-            LE_sub[noT] = 0
-            #alpha_PT[:] = 1.26
-            if not np.any(LE_sub[i] < 0) and not np.any(H_C[i] < 0):
-                break  # loop 1 converged
-
-        max_it2 = 50
-        i = np.logical_and(~L_converged, flag != F_INVALID)
-        LE_S[i] = -1  # explicitly force it2 to run for all active pixels
-        for it2 in range(max_it2):
-            # now do series approach to get sub canopy vegetation and soil temperatures
-            #j = np.logical_and(i, LE_S < 0)
-            j = np.logical_and.reduce((LE_S < 0,~L_converged, flag != F_INVALID))
-
-            alpha_PT_rec_sub[j] -= 0.1
-            # There cannot be negative transpiration from the (sub)-vegetation
-            alpha_PT_rec_sub[alpha_PT_rec_sub <= 0.0] = 0.0
-            flag[np.logical_and(j, alpha_PT_rec_sub == 0.0)] = F_ZERO_LE
-            flag[np.logical_and.reduce((j, alpha_PT_rec_sub < alpha_PT, alpha_PT_rec_sub > 0.0))] = F_ZERO_LE_S
-
-            H_C_sub[j] = calc_H_C_PT(
-                Rn_C_sub[j],
-                f_g_sub[j],
-                T_A_K[j],
-                p[j],
-                c_p[j],
-                alpha_PT_rec_sub[j])
-
-            _, R_x[j], R_S[j] = TSEB.calc_resistances(resistance_form,
-                                                           {
-                                                            "R_x": {"u_friction": u_friction[j], "h_C": h_C_sub[j],
-                                                                    "d_0": d_0_sub[j],
-                                                                    "z_0M": z_0M_sub[j], "L": L[j], "F": F_sub[j],
-                                                                    "LAI": LAI_sub[j],
-                                                                    "leaf_width": leaf_width_sub[j],
-                                                                    "massman_profile": massman_profile,
-                                                                    "res_params": {k: res_params[k][j] for k in res_params.keys()}},
-                                                            "R_S": {"u_friction": u_friction[j], "h_C": h_C_sub[j],
-                                                                    "d_0": d_0_sub[j],
-                                                                    "z_0M": z_0M_sub[j], "L": L[j], "F": F_sub[j],
-                                                                    "omega0": omega0_sub[j],
-                                                                    "LAI": LAI_sub[j], "leaf_width": leaf_width_sub[j],
-                                                                    "massman_profile": massman_profile,
-                                                                    "z0_soil": z0_soil[j], "z_u": z_u[j],
-                                                                    "deltaT": T_S[j] - T_C_sub[j], 'u': u[j],
-                                                                    'rho': rho[j],
-                                                                    "c_p": c_p[j], "f_cover": f_c_sub[j],
-                                                                    "w_C": w_C_sub[j],
-                                                                    "res_params": {k: res_params[k][j] for k in res_params.keys()}}
-                                                            }
-                                                           )
-
-            T_C_sub[j] = TSEB.calc_T_C_series(T_sub[j], T_A_K[j], R_A[j], R_x[j], R_S[j],f_theta_sub[j], H_C_sub[j], rho[j], c_p[j])
-
-            # Calculate soil temperature
-            flag_t = np.zeros(flag.shape) + F_ALL_FLUXES
-            flag_t[j], T_S[j] = TSEB.calc_T_S(T_sub[j], T_C_sub[j], f_theta[j])
-            flag[flag_t == F_INVALID] = F_INVALID
-            LE_S[flag_t == F_INVALID] = 0
-
-            # Recalculate soil resistance using new soil temperature
-            _, R_x[j], R_S[j] = TSEB.calc_resistances(resistance_form,
-                                            {"R_x": {"u_friction": u_friction[j], "h_C": h_C_sub[j],
-                                                     "d_0": d_0_sub[j], "massman_profile": massman_profile,
-                                                     "z_0M": z_0M_sub[j], "L": L[j], "F": F_sub[j], "LAI": LAI_sub[j],
-                                                     "leaf_width": leaf_width_sub[j], "res_params": {k: res_params[k][j] for k in res_params.keys()}},
-
-                                                "R_S": {"u_friction": u_friction[j], "h_C": h_C_sub[j], "d_0": d_0_sub[j],
-                                                     "z_0M": z_0M_sub[j], "L": L[j], "F": F_sub[j], "omega0": omega0_sub[j],
-                                                     "LAI": LAI_sub[j], "leaf_width": leaf_width_sub[j],"massman_profile": massman_profile,
-                                                     "z0_soil": z0_soil[j], "z_u": z_u[j],
-                                                     "deltaT": T_S[j] - T_C_sub[j], "u": u[j], "rho": rho[j],
-                                                     "c_p": c_p[j], "f_cover": f_c_sub[j], "w_C": w_C_sub[j],
-                                                     "res_params": {k: res_params[k][j] for k in res_params.keys()}}
-                                             }
-                                            )
-            j = np.logical_and(i, LE_S < 0)
-            # Get air temperature at canopy interface
-            T_AC[j] = ((T_A_K[j] / R_A[j] + T_S[j] / R_S[j] + T_C_sub[j] / R_x[j])
-                       / (1.0 / R_A[j] + 1.0 / R_S[j] + 1.0 / R_x[j]))
-
-            #calcualte substrate canopy H
-            H_C_sub[j] = rho[j] * c_p[j] * (T_C_sub[j] - T_AC[j]) / R_x[j]
-            # Calculate soil fluxes
-            H_S[j] = rho[j] * c_p[j] * (T_S[j] - T_AC[j]) / R_S[j]
-
-            # Compute Soil Heat Flux Ratio
-            G[j] = TSEB.calc_G([calcG_params[0], calcG_array], Rn_S, j)
-
-            # Estimate latent heat fluxes as residual of energy balance at the primary, secondary and soil sources
-            LE_S[j] = Rn_S[j] - G[j] - H_S[j]
-            LE_C_sub[j] = Rn_C_sub[j] - H_C_sub[j]
-            # store alpha value for secondary canopy in output array
-            alpha_final_sub[j] = alpha_PT_rec_sub[j]
-
-            if np.any(alpha_PT_rec_sub[j] <=0):
-                LE_C_sub[j] = 0
-                H_C_sub[j] = Rn_C_sub[j]
-
-            # Special case if there is no transpiration from vegetation.
-            # In that case, there should also be no evaporation from the soil
-            # and the energy at the soil should be conserved.
-            # See end of appendix A1 in Guzinski et al. (2015).
-            noT = np.logical_and(j, LE_C_sub == 0)
             H_S[noT] = np.minimum(H_S[noT], Rn_S[noT] - G[noT])
             G[noT] = np.maximum(G[noT], Rn_S[noT] - H_S[noT])
             LE_S[noT] = 0
 
-            if not np.any(LE_S[j] < 0):
-                break  # loop 2 converged
+            # Calculate total fluxes
+            H[i] = np.asarray(H_C[i] + H_C_sub[i] + H_S[i])
+            LE[i] = np.asarray(LE_C[i] + LE_C_sub[i] + LE_S[i])
+            it = it + 1
 
-        i = np.logical_and(~L_converged, flag != F_INVALID)
 
-        # Calculate total fluxes
-        H[i] = np.asarray(H_C[i] + H_C_sub[i] + H_S[i])
-        LE[i] = np.asarray(LE_C[i] +LE_C_sub[i]+ LE_S[i])
+            #print("NaN in Rst_ov:", np.isnan(Rst_ov).sum())
+            #print("NaN in Rst_ov_out:", np.isnan(Rst_ov_out).sum())
+            #print(f'i pixel size: {Rst_ov[i].shape}')
 
-        # Now L can be recalculated and the difference between iterations
-        # derived
-        if const_L is None:
-            L[i] = MO.calc_L(
-                u_friction[i],
-                T_A_K[i],
-                rho[i],
-                c_p[i],
-                H[i],
-                LE[i])
-            # Calculate again the friction velocity with the new stability
-            # corrections
-            u_friction[i] = MO.calc_u_star(u[i], z_u[i], L[i], d_0[i], z_0M[i])
-            u_friction[i] = np.asarray(np.maximum(u_friction_min, u_friction[i]))
+            # Now L can be recalculated and the difference between iterations
+            # derived
+            if const_L is None:
+                L[i] = MO.calc_L(
+                    u_friction[i],
+                    T_A_K[i],
+                    rho[i],
+                    c_p[i],
+                    H[i],
+                    LE[i])
+                # Calculate again the friction velocity with the new stability
+                # corrections
+                u_friction[i] = MO.calc_u_star(u[i], z_u[i], L[i], d_0[i], z_0M[i])
+                u_friction[i] = np.asarray(np.maximum(u_friction_min, u_friction[i]))
 
+        #print("NaN count Rst_ov_out:", np.sum(np.isnan(Rst_ov_out)))
+        #print(Rst_ov_out)
 
         if const_L is None:
             # We check convergence against the value of L from previous iteration but as well
@@ -4119,9 +4233,12 @@ def ThreeSEB_SW_SEQ(Tr_K,
      H_S,
      G,
      R_S,
-     R_sub,
-     R_x,
+     R_X_un,
+     R_X_ov,
      R_A,
+     Rss_out,
+     Rst_un_out,
+     Rst_ov_out,
      u_friction,
      L,
      n_iterations) = map(np.asarray,
@@ -4144,14 +4261,18 @@ def ThreeSEB_SW_SEQ(Tr_K,
                          H_S,
                          G,
                          R_S,
-                         R_sub,
-                         R_x,
+                         R_X_un,
+                         R_X_ov,
                          R_A,
+                         Rss_out,
+                         Rst_un_out,
+                         Rst_ov_out,
                          u_friction,
                          L,
                          n_iterations))
 
-    return flag, T_S, T_C, T_C_sub, T_AC, L_n_sub, L_nC, Ln_C_sub, Ln_S,  LE_C, H_C, LE_C_sub, H_C_sub, LE_S, H_S, G, R_S, R_sub, R_x, R_A, u_friction,L, n_iterations
+    return (flag, T_S, T_C, T_C_sub, T_AC, L_n_sub, L_nC, Ln_C_sub, Ln_S,  LE_C, H_C, LE_C_sub, H_C_sub,
+            LE_S, H_S, G, R_S, R_X_un, R_X_ov, R_A,Rss_out, Rst_un_out, Rst_ov_out, u_friction,L, n_iterations)
 
 
 
