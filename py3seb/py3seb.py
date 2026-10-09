@@ -559,7 +559,7 @@ def ThreeSEB_PT(Tr_K,
 
                 # Calculate soil temperature
                 flag_t = np.zeros(flag.shape) + F_ALL_FLUXES
-                flag_t[j], T_S[j] = TSEB.calc_T_S(T_sub[j], T_C_sub[j], f_theta[j])
+                flag_t[j], T_S[j] = TSEB.calc_T_S(T_sub[j], T_C_sub[j], f_theta_sub[j])
                 flag[flag_t == F_INVALID] = F_INVALID
                 LE_S[flag_t == F_INVALID] = 0
 
@@ -1244,7 +1244,7 @@ def ThreeSEB_PM(Tr_K,
 
                 # Calculate soil temperature
                 flag_t = np.zeros(flag.shape) + F_ALL_FLUXES
-                flag_t[j], T_S[j] = TSEB.calc_T_S(T_sub[j], T_C_sub[j], f_theta[j])
+                flag_t[j], T_S[j] = TSEB.calc_T_S(T_sub[j], T_C_sub[j], f_theta_sub[j])
                 flag[flag_t == F_INVALID] = F_INVALID
                 LE_S[flag_t == F_INVALID] = 0
 
@@ -1938,7 +1938,7 @@ def ThreeSEB_PT_PT_SEQ(Tr_K,
 
             # Calculate soil temperature
             flag_t = np.zeros(flag.shape) + F_ALL_FLUXES
-            flag_t[j], T_S[j] = TSEB.calc_T_S(T_sub[j], T_C_sub[j], f_theta[j])
+            flag_t[j], T_S[j] = TSEB.calc_T_S(T_sub[j], T_C_sub[j], f_theta_sub[j])
             flag[flag_t == F_INVALID] = F_INVALID
             LE_S[flag_t == F_INVALID] = 0
 
@@ -2621,7 +2621,7 @@ def ThreeSEB_PM_PT_SEQ(Tr_K,
 
             # Calculate soil temperature
             flag_t = np.zeros(flag.shape) + F_ALL_FLUXES
-            flag_t[j], T_S[j] = TSEB.calc_T_S(T_sub[j], T_C_sub[j], f_theta[j])
+            flag_t[j], T_S[j] = TSEB.calc_T_S(T_sub[j], T_C_sub[j], f_theta_sub[j])
             flag[flag_t == F_INVALID] = F_INVALID
             LE_S[flag_t == F_INVALID] = 0
 
@@ -3314,7 +3314,7 @@ def ThreeSEB_PM_PM_SEQ(Tr_K,
 
             # Calculate soil temperature
             flag_t = np.zeros(flag.shape) + F_ALL_FLUXES
-            flag_t[j], T_S[j] = TSEB.calc_T_S(T_sub[j], T_C_sub[j], f_theta[j])
+            flag_t[j], T_S[j] = TSEB.calc_T_S(T_sub[j], T_C_sub[j], f_theta_sub[j])
             flag[flag_t == F_INVALID] = F_INVALID
             LE_S[flag_t == F_INVALID] = 0
 
