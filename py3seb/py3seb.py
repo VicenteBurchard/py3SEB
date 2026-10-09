@@ -3779,6 +3779,10 @@ def ThreeSEB_SW_SEQ(Tr_K,
     rho_cp = rho * c_p
     vpd = es - ea
 
+    # to limit division by zero in pet.bulk_stomatal_resistance
+    f_g[f_g <= 0] = 0.0001
+    f_g_sub[f_g_sub <= 0] = 0.0001
+
     # Calculate LAI dependent parameters for primary canopy where LAI > 0
     omega0 = CI.calc_omega0_Kustas(LAI, f_c, x_LAD=x_LAD, isLAIeff=True)
     F = np.asarray(LAI / f_c)  # Real LAI
@@ -3806,15 +3810,13 @@ def ThreeSEB_SW_SEQ(Tr_K,
     T_C = np.asarray(np.minimum(Tr_K, T_A_K))
     #T_sub = Tr_K - (f_theta*T_C)/(1-f_theta)
     flag, T_sub = TSEB.calc_T_S(Tr_K, T_C, f_theta)
-    T_sub_converged = np.asarray(np.zeros(Tr_K.shape)).astype(bool)
 
     # Assume first guess that T_C_sub is mean between T_A and T_sub
     T_C_sub = (T_sub + T_A_K)/2
     flag, T_S = TSEB.calc_T_S(T_sub, T_C_sub, f_theta_sub)
     T_AC = T_A_K.copy()
     # Calculate net longwave radiation with current values of T_C, T_C_sub and T_S
-    L_nC, L_n_sub = rad.calc_L_n_Campbell(T_C, T_sub, L_dn, LAI, emis_C, emis_sub,
-                                                x_LAD=x_LAD)
+    L_nC, L_n_sub = rad.calc_L_n_Campbell(T_C, T_sub, L_dn, LAI, emis_C, emis_sub, x_LAD=x_LAD)
     Sn_sub = Sn_S + Sn_C_sub
 
     # maybe check for convergance of radiation between layers
@@ -3858,47 +3860,20 @@ def ThreeSEB_SW_SEQ(Tr_K,
         LE_sub[np.logical_and(~L_converged, flag != F_INVALID)] = -1
         LE_C[np.logical_and(~L_converged, flag != F_INVALID)] = -1
 
-        T_sub_converged[np.logical_and(~L_converged, flag != F_INVALID)] = False
-
+        # we assume that Rst_un incrases more quickly than Rst_un
         rst_step_ov = STEP_RST
-        rst_step_un = STEP_RST*2
+        rst_step_un = STEP_RST * 2
         Rst_ov = Rst_ov_min[:] - rst_step_ov
         Rst_un = Rst_un_min[:] - rst_step_un
         Rss = Rss_min[:] - STEP_RSS
 
-        max_it1 = 50
-        it = 0
-        #for it1 in range(max_it1):
-        #print(f'-- first i: {np.sum(i)}')
-        #print(f'LE_S: {np.sum(LE_S < 0)}')
-        #print(f'L_converged: {np.sum(~L_converged)}')
+        while np.any(LE_S[i] < 0):
 
-        constraint = np.logical_and.reduce((
-                                            LE_S[i] < 0,
-                                            LE_C[i] > delta_Rn[i],
-                                            LE_C_sub[i] > Rn_C_sub[i]))
-        eps = 20 # w/m2
-        #constraint = LE_S[i] < 0
-        while np.any(np.logical_and(LE_S[i] < 0, LE_C[i] > delta_Rn[i] + eps)):
-
-            #i = np.logical_and.reduce((np.logical_or(LE_S < 0, LE_C > delta_Rn,LE_C_sub > Rn_C_sub),
-            #                           ~L_converged,
-            #                           flag != F_INVALID))
-            #                           #np.logical_or(Rst_ov < MAX_RST, Rst_un < MAX_RST)
-                                     #))
-            i = np.logical_and.reduce((np.logical_or(LE_S < 0,LE_C > delta_Rn + eps),
+            i = np.logical_and.reduce(( LE_S < 0,
                                        ~L_converged,
-                                       flag != F_INVALID))
-                                       #np.logical_or(Rst_ov < MAX_RST, Rst_un < MAX_RST)
-                                     #))
-
-            if it > 100:
-                break
-
-            #print(f'iteration {it}: {np.sum(i)}')
-            #print(f'LE_S: {np.sum(LE_S < 0)}')
-            #print(f'L_converged: {np.sum(~L_converged)}')
-
+                                       flag != F_INVALID,
+                                        Rst_ov <= MAX_RST
+                                                    ))
 
             Rst_ov[i] += rst_step_ov
             Rst_un[i] += rst_step_un
@@ -3906,28 +3881,19 @@ def ThreeSEB_SW_SEQ(Tr_K,
             rst_step_ov += RELATIVE_INCREASE * rst_step_ov
             rst_step_un += RELATIVE_INCREASE * rst_step_un
 
-            Rss[np.logical_and(i,Rss>MAX_RSS)] = MAX_RSS
-            Rst_un[np.logical_and(i,Rst_un>MAX_RST)] = MAX_RST
-            Rst_ov[np.logical_and(i,Rst_ov>MAX_RST)] = MAX_RST
-
             # There cannot be negative transpiration from the vegetation
-            flag[np.logical_and(i, Rst_ov > MAX_RST)] = F_ZERO_LE
-            flag[np.logical_and(i, Rst_un > MAX_RST)] = F_ZERO_LE
+            flag[np.logical_and(i, Rst_ov >= MAX_RST)] = F_ZERO_LE_S
+            flag[np.logical_and(i, Rst_un >= MAX_RST)] = F_ZERO_LE_S
 
-            #flag[np.logical_and.reduce((i, Rss > 500, Rst_ov < MAX_RST))] =\
-            #    F_ZERO_LE_S
+            # clamp maximum surface resistances
+            Rss[np.logical_and(i,Rss > MAX_RSS)] = MAX_RSS
+            Rst_un[np.logical_and(i,Rst_un > MAX_RST)] = MAX_RST
+            Rst_ov[np.logical_and(i,Rst_ov > MAX_RST)] = MAX_RST
 
-
-            # Transfer the resistances
+            # Transfer out the resistances
             Rst_ov_out[i] = Rst_ov[i]
             Rst_un_out[i] = Rst_un[i]
             Rss_out[i] = Rss[i]
-
-
-
-            #print(f'Rst_ov: {Rst_ov}')
-            #print(f'Rst_ov {Rst_ov.shape} vs Rst_ov[i] {Rst_ov[i].shape}')
-            flag[np.logical_and(i, Rst_ov > MAX_RST)] = F_ZERO_LE
 
             # aerodynamic resistances (air, overstory bulk )
             R_A[i], R_X_ov[i], _ = TSEB.calc_resistances(resistance_form,
@@ -3975,7 +3941,7 @@ def ThreeSEB_SW_SEQ(Tr_K,
             # taking into account substrate patch representation (i.e. LHomme et al.2012)
             # need to divide resistances of substrate by fractional cover as in Lhomme 2012
             R_S[i] = R_S[i]/(1-f_theta_sub[i])
-            Rss[i] = Rss[i]/(1-f_theta_sub[i])
+            Rss_eff = Rss[i]/(1-f_theta_sub[i])
             R_X_un[i] = R_X_un[i]/f_theta_sub[i]
             R_c_un[i] = R_c_un[i]/f_theta_sub[i]
 
@@ -3987,7 +3953,7 @@ def ThreeSEB_SW_SEQ(Tr_K,
                                                                                    R_S[i],
                                                                                    R_c_ov[i],
                                                                                    R_c_un[i],
-                                                                                   Rss[i],
+                                                                                   Rss_eff,
                                                                                    delta[i],
                                                                                    psicr[i])
             # Compute Soil Heat Flux Ratio
@@ -3996,7 +3962,7 @@ def ThreeSEB_SW_SEQ(Tr_K,
             # Eq. 31 in [Lhomme et al.2012]
             PM_S = (delta[i] * (Rn[i] - G[i]) + (rho_cp[i] * vpd[i] - delta[i] * R_S[i] * (delta_Rn[i] + Rn_C_sub[i])) / (
                     R_A[i] + R_S[i])) / \
-                      (delta[i] + psicr[i] * (1. + Rss[i] / (R_A[i] + R_S[i])))
+                      (delta[i] + psicr[i] * (1. + Rss_eff / (R_A[i] + R_S[i])))
             PM_S[np.isnan(PM_S)] = 0
 
             # Eq. 31 in [Lhomme et al.2012]
@@ -4037,9 +4003,8 @@ def ThreeSEB_SW_SEQ(Tr_K,
             #LE_S[i] = (delta[i] * (Rn_S[i] - G[i]) + rho_cp[i] * vpd_0 / R_S[i]) / \
             #          (delta[i] + psicr[i] * (1. + Rss[i] / R_S[i]))
             #H_S[i] = Rn_S[i] - G[i] - LE_S[i]
-            # invert to get component temperatures (Appendix B. Montes et al. 2014)
-            # def calc_component_temperature_montes(A, Ra, Rs, T_AC, vpd_0, delta, rho_cp, psicr):
 
+            # invert to get component temperatures (Appendix B. Montes et al. 2014)
             A_C = LE_C[i] + H_C[i]
             # overstory
             T_C[i] = et.calc_component_temperature_montes(A_C,
@@ -4060,22 +4025,17 @@ def ThreeSEB_SW_SEQ(Tr_K,
                                                               delta[i],
                                                               rho_cp[i],
                                                               psicr[i])
-            '''
-            # soil
-            A_S = LE_S[i] + H_S[i]
-            T_S[i] = et.calc_component_temperature_montes(A_S,
-                                                          R_S[i],
-                                                          Rss[i],
-                                                          T_AC[i],
-                                                          vpd_0,
-                                                          delta[i],
-                                                          rho_cp[i],
-                                                          psicr[i])
-            '''
 
-            #print(f'i_size = {LE_S[i].shape}')
-            #print(f'Rc-Iteration: {it}\nR_c_ov_mean = {np.nanmean(R_c_ov)}'
-            #      f'\nR_c_un_mean = {np.nanmean(R_c_un)}\nRss_mean = {np.nanmean(Rss)}\nLE_S = {LE_S[i]}')
+            # soil
+            #A_S = LE_S[i] + H_S[i]
+            #T_S[i] = et.calc_component_temperature_montes(A_S,
+            #                                              R_S[i],
+            #                                              Rss[i],
+            #                                              T_AC[i],
+            #                                              vpd_0,
+            #                                              delta[i],
+            #                                              rho_cp[i],
+            #                                              psicr[i])
 
 
             #TODO: for now keep it like this (probably need to edit the calc_T_C_series for 3 sources)
@@ -4097,8 +4057,7 @@ def ThreeSEB_SW_SEQ(Tr_K,
 
             # Calculate net longwave radiation with current values of T_C, T_C_sub and T_S
             ### TODO: change this to account that we now have all three component temperatures
-            L_nC[i], L_n_sub[i] = rad.calc_L_n_Campbell(T_C[i], T_sub[i], L_dn[i], LAI[i], emis_C[i], emis_sub[i],
-                                                  x_LAD=x_LAD[i])
+            L_nC[i], L_n_sub[i] = rad.calc_L_n_Campbell(T_C[i], T_sub[i], L_dn[i], LAI[i], emis_C[i], emis_sub[i], x_LAD=x_LAD[i])
             # maybe check for convergance of radiation between layers
             delta_Rn[i] = Sn_C [i] + L_nC[i]
             Rn_sub[i] = Sn_sub[i] + L_n_sub[i]
@@ -4127,14 +4086,7 @@ def ThreeSEB_SW_SEQ(Tr_K,
                                                      "res_params": {k: res_params[k][i] for k in res_params.keys()}}
                                              }
                                             )
-            #i = np.logical_and.reduce((LE_S < 0, ~L_converged, flag != F_INVALID))
-            i = np.logical_and.reduce((np.logical_or(LE_S < 0,LE_C > delta_Rn,LE_C_sub > Rn_C_sub),
-                                       ~L_converged,
-                                       flag != F_INVALID
-                                     ))
-            #(f'iteration {it} (AFTER): {np.sum(i)}')
-            #print(f'LE_S: {np.sum(LE_S < 0)}')
-            #print(f'L_converged: {np.sum(~L_converged)}')
+            i = np.logical_and.reduce((LE_S < 0, ~L_converged, flag != F_INVALID))
 
             # TODO: check if correct formulation (adapted equation A.4 of Norman et al. 1995)
             T_AC[i] = ((T_A_K[i] / R_A[i] + T_S[i] / R_S[i] + T_C_sub[i] / R_X_un[i] + T_C[i] / R_X_ov[i])
@@ -4150,24 +4102,31 @@ def ThreeSEB_SW_SEQ(Tr_K,
             LE_C_sub[i] = Rn_C_sub[i] - H_C_sub[i]
             LE_C[i] = delta_Rn[i] - H_C[i]
 
+            # if LE_S still negative with maximum resistances
+            LEneg = ((LE_S < 0) & ~L_converged &
+                     (flag != F_INVALID) &
+                     (Rst_ov >= MAX_RST) & # assuming Rst_ov reaches maximum resistances slowest
+                     (Rss >= MAX_RSS))
+            # force LE_S to 0
+            LE_S[LEneg] = 0.
+            G[LEneg] = Rn_S[LEneg] - H_S[LEneg]  # original flag-5 semantics: G = Rn - H
+            LE[LEneg] = LE_C[LEneg] + LE_C_sub[LEneg]
+            H[LEneg] = H_C[LEneg] + H_C_sub[LEneg] + H_S[LEneg]
+            flag[LEneg] = F_ZERO_LE
+
             # Special case if there is no transpiration from vegetation.
             # In that case, there should also be no evaporation from the subsrate
             # and the energy at the soil should be conserved.
             # See end of appendix A1 in Guzinski et al. (2015).
-            noT = np.logical_and(i, LE_C == 0)
+            noT = np.logical_and(i, LE_C <= 0)
             H_S[noT] = np.minimum(H_S[noT], Rn_S[noT] - G[noT])
             G[noT] = np.maximum(G[noT], Rn_S[noT] - H_S[noT])
             LE_S[noT] = 0
+            flag[noT] = F_ZERO_LE
 
             # Calculate total fluxes
             H[i] = np.asarray(H_C[i] + H_C_sub[i] + H_S[i])
             LE[i] = np.asarray(LE_C[i] + LE_C_sub[i] + LE_S[i])
-            it = it + 1
-
-
-            #print("NaN in Rst_ov:", np.isnan(Rst_ov).sum())
-            #print("NaN in Rst_ov_out:", np.isnan(Rst_ov_out).sum())
-            #print(f'i pixel size: {Rst_ov[i].shape}')
 
             # Now L can be recalculated and the difference between iterations
             # derived
@@ -4183,9 +4142,6 @@ def ThreeSEB_SW_SEQ(Tr_K,
                 # corrections
                 u_friction[i] = MO.calc_u_star(u[i], z_u[i], L[i], d_0[i], z_0M[i])
                 u_friction[i] = np.asarray(np.maximum(u_friction_min, u_friction[i]))
-
-        #print("NaN count Rst_ov_out:", np.sum(np.isnan(Rst_ov_out)))
-        #print(Rst_ov_out)
 
         if const_L is None:
             # We check convergence against the value of L from previous iteration but as well
